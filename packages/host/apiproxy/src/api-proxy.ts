@@ -3,9 +3,11 @@
  * narrow RpcRequest<P> and echoes request.rpcId on the RpcResponse<T>.
  */
 
+import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdir, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { promisify } from 'node:util'
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
@@ -36,7 +38,7 @@ import {
 import type { PresetBearingSession } from '@deepseek-ai/dsh-agent-presets'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {
-  ApiProxy, ConfigurableProviderView, CredentialView, GoalRef, HistoryEntry, HostFrame,
+  ApiProxy, ConfigurableProviderView, CredentialView, GitCommit, GitDiffFile, GoalRef, HistoryEntry, HostFrame,
   ModelCatalogFailure, ModelProviderGroup,
   ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem,
   QueuedInboxItem, SessionSummary, SettingsNamespaceView, SubagentAddress, JobView, ToolEventView,
@@ -112,6 +114,24 @@ import { canOpenNativePath, openNativePath, openNativeTextFile } from './native-
 
 /** Page size when history is called without maxMessages. */
 const DEFAULT_MAX_MESSAGES = 50
+
+/** Promisified `git` runner: utf8 stdout, bounded buffer. */
+const execFileAsync = promisify(execFile)
+
+/**
+ * Run `git` in a working directory and return its trimmed utf8 stdout.
+ * @param cwd - working directory (the workspace root).
+ * @param args - `git` argv (the `git` binary is implicit).
+ * @returns stdout.
+ */
+async function runGit(cwd: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync('git', args, {
+    cwd,
+    maxBuffer: 64 * 1024 * 1024,
+    encoding: 'utf8' as const,
+  })
+  return stdout as string
+}
 
 /**
  * Non-model settings namespaces intentionally served to the Web client. The
@@ -3007,6 +3027,121 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async openPath(request, signal) {
         return openPath(request, request.payload.path, signal)
+      },
+    },
+
+    git: {
+      async log(request) {
+        const cwd = defaults.cwd
+        let repoRoot: string
+        try {
+          repoRoot = (await runGit(cwd, ['rev-parse', '--show-toplevel'])).trim()
+        } catch {
+          // Not inside a work tree: report it rather than erroring, so the
+          // client can render the empty state instead of a transport failure.
+          return ok(request, { repoRoot: cwd, repo: false, commits: [], truncated: false })
+        }
+        try {
+          await runGit(repoRoot, ['rev-parse', '--verify', 'HEAD'])
+        } catch {
+          // Inside a work tree with no commits yet (HEAD unborn).
+          return ok(request, { repoRoot, repo: true, commits: [], truncated: false })
+        }
+        const maxCount = request.payload.maxCount ?? 300
+        try {
+          const out = await runGit(repoRoot, [
+            'log', `-n${maxCount}`,
+            '--format=%H%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%D%x00%s',
+          ])
+          const commits: GitCommit[] = out.split('\n').filter(line => line.length > 0).map((line) => {
+            const [hash, parents, authorName, authorEmail, authorDate, commitDate, refs, subject] = line.split('\0')
+            return {
+              hash: hash ?? '',
+              parents: (parents ?? '').split(' ').filter(parent => parent.length > 0),
+              authorName: authorName ?? '',
+              authorEmail: authorEmail ?? '',
+              authorDate: authorDate ?? '',
+              commitDate: commitDate ?? '',
+              subject: subject ?? '',
+              refs: (refs ?? '').split(', ').filter(ref => ref.length > 0),
+            }
+          })
+          return ok(request, { repoRoot, repo: true, commits, truncated: commits.length >= maxCount })
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'internal',
+            message: `git log failed: ${error instanceof Error ? error.message : String(error)}`,
+            details: {},
+          })
+        }
+      },
+
+      async show(request) {
+        const { hash } = request.payload
+        try {
+          const [msg, nameStatus] = await Promise.all([
+            runGit(defaults.cwd, ['show', '-s', '--format=%H%x00%s%x00%b', hash]),
+            runGit(defaults.cwd, ['show', '--format=', '--name-status', hash]),
+          ])
+          const [commitHash, subject, body] = msg.split('\0')
+          const files: GitDiffFile[] = nameStatus.split('\n').filter(line => line.length > 0).map((line) => {
+            const [status, ...rest] = line.split('\t')
+            return { status: status ?? '', path: rest.join('\t') }
+          })
+          return ok(request, {
+            hash: commitHash ?? hash,
+            subject: subject ?? '',
+            body: body ?? '',
+            files,
+          })
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'internal',
+            message: `git show failed: ${error instanceof Error ? error.message : String(error)}`,
+            details: {},
+          })
+        }
+      },
+
+      async fileDiff(request) {
+        const { hash, path } = request.payload
+        try {
+          const patch = await runGit(defaults.cwd, [
+            'show', '--format=', '--no-color', '--patch', hash, '--', path,
+          ])
+          return ok(request, { hash, path, patch })
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'internal',
+            message: `git fileDiff failed: ${error instanceof Error ? error.message : String(error)}`,
+            details: {},
+          })
+        }
+      },
+
+      async refs(request) {
+        try {
+          const head = await runGit(defaults.cwd, ['symbolic-ref', '--short', '-q', 'HEAD'])
+            .then(out => out.trim())
+            .catch(() => '')
+          const out = await runGit(defaults.cwd, [
+            'for-each-ref', '--format=%(refname:short)%x00%(objecttype)', 'refs/heads', 'refs/tags',
+          ])
+          const branches: string[] = []
+          const tags: string[] = []
+          for (const line of out.split('\n').filter(entry => entry.length > 0)) {
+            const [name, type] = line.split('\0')
+            if (type === 'tag') tags.push(name ?? '')
+            else branches.push(name ?? '')
+          }
+          return ok(request, { head, branches, tags })
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'internal',
+            message: `git refs failed: ${error instanceof Error ? error.message : String(error)}`,
+            details: {},
+          })
+        }
       },
     },
 

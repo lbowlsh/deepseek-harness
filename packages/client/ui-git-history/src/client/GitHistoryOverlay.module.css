@@ -1,0 +1,259 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: var(--dsw-alias-bg-mask-2);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1100px, 100%);
+  max-height: 100%;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 30%);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.title {
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.branch {
+  color: var(--dsw-alias-brand-primary);
+  font-size: 13px;
+}
+
+.repo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.close {
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.list {
+  flex: 1 1 60%;
+  min-width: 0;
+  overflow: auto;
+  border-right: 1px solid var(--dsw-alias-border-l2);
+}
+
+.rows {
+  display: flex;
+}
+
+.graph {
+  flex: none;
+}
+
+.edge {
+  stroke: var(--dsw-alias-brand-primary);
+  stroke-width: 1.5;
+}
+
+.dot {
+  fill: var(--dsw-alias-brand-primary);
+}
+
+.commits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.commitRow {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 12px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+
+.commitRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.commitSelected {
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-left-color: var(--dsw-alias-brand-primary);
+}
+
+.commitMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hash {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+.ref {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover-accent);
+  color: var(--dsw-alias-brand-primary);
+  font-size: 11px;
+}
+
+.meta {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+}
+
+.detail {
+  flex: 1 1 40%;
+  min-width: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.empty {
+  padding: 24px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.detailHash {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.detailSubject {
+  margin-top: 4px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.detailBody {
+  margin: 12px 0;
+  white-space: pre-wrap;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.files {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.file {
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.file:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.fileStatus {
+  flex: none;
+  width: 18px;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.filePath {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.patch {
+  margin: 12px 0 0;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  font-family: monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow: auto;
+  color: var(--dsw-alias-label-primary);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  padding: 6px 8px;
+}
+
+.toggle:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.toggleActive {
+  color: var(--dsw-alias-brand-primary);
+}
+
+.toggleGlyph {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.toggleLabel {
+  font-size: 13px;
+}

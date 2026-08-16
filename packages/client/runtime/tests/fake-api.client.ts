@@ -277,6 +277,13 @@ export class FakeApiClient implements IApiClient {
     discoverModels: payload => this.record('llm.discoverModels', payload, Promise.resolve(ok({ models: [] }))),
   }
 
+  readonly git: IApiClient['git'] = {
+    log: payload => this.record('git.log', payload, Promise.resolve(ok({ repoRoot: '/tmp', repo: false, commits: [], truncated: false }))),
+    show: payload => this.record('git.show', payload, Promise.resolve(ok({ hash: payload.hash, subject: '', body: '', files: [] }))),
+    fileDiff: payload => this.record('git.fileDiff', payload, Promise.resolve(ok({ hash: payload.hash, path: payload.path, patch: '' }))),
+    refs: payload => this.record('git.refs', payload, Promise.resolve(ok({ head: '', branches: [], tags: [] }))),
+  }
+
   /** When true, streams never fire onOpen (misbehaving-carrier material for the handshake timeout guard). */
   suppressStreamOpen = false
 

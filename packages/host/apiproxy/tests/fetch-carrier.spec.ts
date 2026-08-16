@@ -286,6 +286,12 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       mux: (_request, signal) => stream(muxFrames, signal),
       host: (_request, signal) => stream(hostFrames, signal),
     },
+    git: {
+      log: async request => ({ rpcId: request.rpcId, result: { ok: true as const, value: { repoRoot: '/tmp', repo: false, commits: [], truncated: false } } }),
+      show: async request => ({ rpcId: request.rpcId, result: { ok: true as const, value: { hash: request.payload.hash, subject: '', body: '', files: [] } } }),
+      fileDiff: async request => ({ rpcId: request.rpcId, result: { ok: true as const, value: { hash: request.payload.hash, path: request.payload.path, patch: '' } } }),
+      refs: async request => ({ rpcId: request.rpcId, result: { ok: true as const, value: { head: '', branches: [], tags: [] } } }),
+    },
     async respond(message: ClientResponse): Promise<RpcReceipt> {
       return message.rpcId === 'known' ? { accepted: true } : { accepted: false, reason: 'not-pending' }
     },

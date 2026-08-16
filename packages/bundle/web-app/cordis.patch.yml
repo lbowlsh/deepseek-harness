@@ -273,6 +273,9 @@
     - id: ui-trajectory
       name: '@deepseek-ai/dsh-client-ui-trajectory'
 
+    - id: ui-git-history
+      name: '@deepseek-ai/dsh-client-ui-git-history'
+
 # ── the agent plane moves behind agent presets ─────────────────────────────
 #
 # Every row below composes what ONE agent contributes to the host registries:

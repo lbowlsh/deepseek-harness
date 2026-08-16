@@ -40,6 +40,9 @@ import {
   workspaceListValueSchema,
   workspaceRenameValueSchema,
 } from '../api/workspace.schema.ts'
+import {
+  gitFileDiffValueSchema, gitLogValueSchema, gitRefsValueSchema, gitShowValueSchema,
+} from '../api/git.schema.ts'
 import { skillListValueSchema } from '../api/skills.schema.ts'
 import {
   agentPresetCopyValueSchema, agentPresetListValueSchema, agentPresetOpenDocumentValueSchema,
@@ -121,6 +124,12 @@ export interface IApiClient {
     insertSessionBefore(payload: RequestPayload<'workspace.insertSessionBefore'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.insertSessionBefore'>>>
     archiveSession(payload: RequestPayload<'workspace.archiveSession'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.archiveSession'>>>
   }
+  git: {
+    log(payload: RequestPayload<'git.log'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'git.log'>>>
+    show(payload: RequestPayload<'git.show'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'git.show'>>>
+    fileDiff(payload: RequestPayload<'git.fileDiff'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'git.fileDiff'>>>
+    refs(payload: RequestPayload<'git.refs'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'git.refs'>>>
+  }
   skills: {
     list(payload: RequestPayload<'skill.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.list'>>>
   }
@@ -198,6 +207,10 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'workspace.insertBefore': workspaceInsertBeforeValueSchema,
   'workspace.insertSessionBefore': workspaceInsertSessionBeforeValueSchema,
   'workspace.archiveSession': workspaceArchiveSessionValueSchema,
+  'git.log': gitLogValueSchema,
+  'git.show': gitShowValueSchema,
+  'git.fileDiff': gitFileDiffValueSchema,
+  'git.refs': gitRefsValueSchema,
   'skill.list': skillListValueSchema,
   'agentPreset.list': agentPresetListValueSchema,
   'agentPreset.select': agentPresetSelectValueSchema,
@@ -451,6 +464,13 @@ export abstract class AbstractApiClient implements IApiClient {
     insertBefore: (payload, signal) => this.callUnary('workspace.insertBefore', payload, signal),
     insertSessionBefore: (payload, signal) => this.callUnary('workspace.insertSessionBefore', payload, signal),
     archiveSession: (payload, signal) => this.callUnary('workspace.archiveSession', payload, signal),
+  }
+
+  readonly git: IApiClient['git'] = {
+    log: (payload, signal) => this.callUnary('git.log', payload, signal),
+    show: (payload, signal) => this.callUnary('git.show', payload, signal),
+    fileDiff: (payload, signal) => this.callUnary('git.fileDiff', payload, signal),
+    refs: (payload, signal) => this.callUnary('git.refs', payload, signal),
   }
 
   readonly skills: IApiClient['skills'] = {

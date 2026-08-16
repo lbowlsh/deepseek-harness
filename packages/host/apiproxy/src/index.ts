@@ -90,6 +90,7 @@ export class ApiProxyService extends Service implements ApiProxy {
   readonly credentials: ApiProxy['credentials']
   readonly llm: ApiProxy['llm']
   readonly events: ApiProxy['events']
+  readonly git: ApiProxy['git']
   readonly downloads: ApiProxy['downloads']
   readonly respond: ApiProxy['respond']
 
@@ -118,6 +119,7 @@ export class ApiProxyService extends Service implements ApiProxy {
     this.credentials = api.credentials
     this.llm = api.llm
     this.events = api.events
+    this.git = api.git
     this.downloads = api.downloads
     // createApiProxy returns closures (no `this` capture), so the bind is
     // behavior-neutral.

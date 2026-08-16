@@ -43,6 +43,9 @@ import {
   workspaceListRequestSchema,
   workspaceRenameRequestSchema,
 } from '../api/workspace.schema.ts'
+import {
+  gitFileDiffRequestSchema, gitLogRequestSchema, gitRefsRequestSchema, gitShowRequestSchema,
+} from '../api/git.schema.ts'
 import { skillListRequestSchema } from '../api/skills.schema.ts'
 import {
   agentPresetCopyRequestSchema, agentPresetListRequestSchema, agentPresetOpenDocumentRequestSchema,
@@ -116,6 +119,10 @@ const UNARY_ROUTES: UnaryRoutes = {
   'workspace.insertBefore': { schema: workspaceInsertBeforeRequestSchema, invoke: (api, r) => api.workspace.insertBefore(r) },
   'workspace.insertSessionBefore': { schema: workspaceInsertSessionBeforeRequestSchema, invoke: (api, r) => api.workspace.insertSessionBefore(r) },
   'workspace.archiveSession': { schema: workspaceArchiveSessionRequestSchema, invoke: (api, r) => api.workspace.archiveSession(r) },
+  'git.log': { schema: gitLogRequestSchema, invoke: (api, r) => api.git.log(r) },
+  'git.show': { schema: gitShowRequestSchema, invoke: (api, r) => api.git.show(r) },
+  'git.fileDiff': { schema: gitFileDiffRequestSchema, invoke: (api, r) => api.git.fileDiff(r) },
+  'git.refs': { schema: gitRefsRequestSchema, invoke: (api, r) => api.git.refs(r) },
   'skill.list': { schema: skillListRequestSchema, invoke: (api, r) => api.skills.list(r) },
   'agentPreset.list': { schema: agentPresetListRequestSchema, invoke: (api, r) => api.agentPresets.list(r) },
   'agentPreset.select': { schema: agentPresetSelectRequestSchema, invoke: (api, r) => api.agentPresets.select(r) },

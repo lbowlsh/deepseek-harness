@@ -129,6 +129,12 @@ function scriptedApi(overrides: {
       ...overrides.llm,
     },
     events: { mux: () => empty<MuxFrame>(), host: () => empty<HostFrame>(), ...overrides.events },
+    git: {
+      log: r => ok(r, { repoRoot: '/tmp', repo: false, commits: [], truncated: false }),
+      show: r => ok(r, { hash: r.payload.hash, subject: '', body: '', files: [] }),
+      fileDiff: r => ok(r, { hash: r.payload.hash, path: r.payload.path, patch: '' }),
+      refs: r => ok(r, { head: '', branches: [], tags: [] }),
+    },
     respond: overrides.respond ?? (() => Promise.resolve({ accepted: false as const, reason: 'not-pending' as const })),
     downloads: { sessionLog: async () => new Response('stub', { status: 404 }) },
   }

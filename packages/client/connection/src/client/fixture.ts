@@ -2962,6 +2962,12 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         models: fixtureModelGroups().flatMap(group => group.models.map(model => ({ id: model.id, name: model.name }))),
       }),
     },
+    git: {
+      log: request => ok(request, { repoRoot: '/tmp/fixture', repo: false, commits: [], truncated: false }),
+      show: request => ok(request, { hash: request.payload.hash, subject: '', body: '', files: [] }),
+      fileDiff: request => ok(request, { hash: request.payload.hash, path: request.payload.path, patch: '' }),
+      refs: request => ok(request, { head: '', branches: [], tags: [] }),
+    },
     respond(message: ClientResponse): Promise<RpcReceipt> {
       // Same routing discipline as the host: rpcId first, then the payload's
       // audit correlation; a settled or unknown id is not-pending.
@@ -3105,6 +3111,10 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'workspace.insertBefore': return this.api.workspace.insertBefore(request)
       case 'workspace.insertSessionBefore': return this.api.workspace.insertSessionBefore(request)
       case 'workspace.archiveSession': return this.api.workspace.archiveSession(request)
+      case 'git.log': return this.api.git.log(request)
+      case 'git.show': return this.api.git.show(request)
+      case 'git.fileDiff': return this.api.git.fileDiff(request)
+      case 'git.refs': return this.api.git.refs(request)
       case 'skill.list': return this.api.skills.list(request)
       case 'agentPreset.list': return this.api.agentPresets.list(request)
       case 'agentPreset.select': return this.api.agentPresets.select(request)
