@@ -3,11 +3,9 @@
  * narrow RpcRequest<P> and echoes request.rpcId on the RpcResponse<T>.
  */
 
-import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir, readFile, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { promisify } from 'node:util'
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
@@ -36,6 +34,10 @@ import {
   SETTINGS_NAMESPACE as AGENT_PRESET_SETTINGS_NAMESPACE, UnknownPresetError,
 } from '@deepseek-ai/dsh-agent-presets'
 import type { PresetBearingSession } from '@deepseek-ai/dsh-agent-presets'
+// Value-free type import: brings the `ctx.subprocess` Context merge and the
+// `SubprocessOutputReader` type so `runGit` routes `git` through the managed
+// subprocess seam (credential scrub + teardown) instead of `node:child_process`.
+import type { SubprocessOutputReader } from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {
   ApiProxy, ConfigurableProviderView, CredentialView, GitCommit, GitDiffFile, GoalRef, HistoryEntry, HostFrame,
@@ -115,22 +117,65 @@ import { canOpenNativePath, openNativePath, openNativeTextFile } from './native-
 /** Page size when history is called without maxMessages. */
 const DEFAULT_MAX_MESSAGES = 50
 
-/** Promisified `git` runner: utf8 stdout, bounded buffer. */
-const execFileAsync = promisify(execFile)
+/** In-memory tail cap for one `git` invocation's stdout (the old `execFile` `maxBuffer` bound). */
+const GIT_STDOUT_MAX_BYTES = 64 * 1024 * 1024
+/** In-memory tail cap for stderr, enough to form a failure message. */
+const GIT_STDERR_MAX_BYTES = 1024 * 1024
+/** SIGTERM → SIGKILL escalation window for a managed `git` process tree. */
+const GIT_GRACE_MS = 10_000
+
+/** Recover one collected stream's complete text, reading its spill file when the tail lost its head. */
+async function fullCollectedText(reader: SubprocessOutputReader): Promise<string> {
+  const read = reader.readFrom(0)
+  if (!read.lossy) return read.text
+  if (read.spillPath === undefined) {
+    throw new Error('git output exceeded the retained buffer and its spill file was discarded')
+  }
+  return readFile(read.spillPath, 'utf8')
+}
+
+/** The stderr tail, enough to form a failure message (the spill head is not needed). */
+function stderrText(reader: SubprocessOutputReader | undefined): string {
+  return reader?.readFrom(0).text ?? ''
+}
 
 /**
- * Run `git` in a working directory and return its trimmed utf8 stdout.
+ * Run `git` in a working directory and return its full utf8 stdout.
+ *
+ * Routing through the managed subprocess seam instead of spawning `git`
+ * directly buys two guarantees for free: credential-shaped environment names
+ * are scrubbed from the child, and a still-running tree is terminated and
+ * joined when the subprocess service disposes.
+ * @param ctx - host context providing the subprocess service.
  * @param cwd - working directory (the workspace root).
  * @param args - `git` argv (the `git` binary is implicit).
- * @returns stdout.
+ * @returns full stdout (spill-recovered when the tail window truncated).
  */
-async function runGit(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', args, {
+async function runGit(ctx: Context, cwd: string, args: string[]): Promise<string> {
+  const subprocess = ctx.get('subprocess')
+  if (subprocess === undefined) {
+    throw new Error('git api requires the subprocess service; load @deepseek-ai/dsh-subprocess-local')
+  }
+  const handle = subprocess.spawn({
+    argv: ['git', ...args],
     cwd,
-    maxBuffer: 64 * 1024 * 1024,
-    encoding: 'utf8' as const,
+    stdio: {
+      stdin: 'ignore',
+      stdout: { maxBytes: GIT_STDOUT_MAX_BYTES, spill: { maxBytes: GIT_STDOUT_MAX_BYTES } },
+      stderr: { maxBytes: GIT_STDERR_MAX_BYTES },
+    },
+    graceMs: GIT_GRACE_MS,
   })
-  return stdout as string
+  const outcome = await handle.done
+  if (outcome.exitCode !== 0) {
+    const detail = stderrText(handle.collected.stderr).trim()
+    throw new Error(detail.length > 0 ? detail : `git exited with code ${String(outcome.exitCode)}`)
+  }
+  const stdout = handle.collected.stdout
+  if (stdout === undefined) {
+    throw new Error('subprocess implementation dropped the collected stdout stream')
+  }
+  return fullCollectedText(stdout)
 }
 
 /**
@@ -3035,21 +3080,21 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const cwd = defaults.cwd
         let repoRoot: string
         try {
-          repoRoot = (await runGit(cwd, ['rev-parse', '--show-toplevel'])).trim()
+          repoRoot = (await runGit(ctx, cwd, ['rev-parse', '--show-toplevel'])).trim()
         } catch {
           // Not inside a work tree: report it rather than erroring, so the
           // client can render the empty state instead of a transport failure.
           return ok(request, { repoRoot: cwd, repo: false, commits: [], truncated: false })
         }
         try {
-          await runGit(repoRoot, ['rev-parse', '--verify', 'HEAD'])
+          await runGit(ctx, repoRoot, ['rev-parse', '--verify', 'HEAD'])
         } catch {
           // Inside a work tree with no commits yet (HEAD unborn).
           return ok(request, { repoRoot, repo: true, commits: [], truncated: false })
         }
         const maxCount = request.payload.maxCount ?? 300
         try {
-          const out = await runGit(repoRoot, [
+          const out = await runGit(ctx, repoRoot, [
             'log', `-n${maxCount}`,
             '--format=%H%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%D%x00%s',
           ])
@@ -3080,8 +3125,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const { hash } = request.payload
         try {
           const [msg, nameStatus] = await Promise.all([
-            runGit(defaults.cwd, ['show', '-s', '--format=%H%x00%s%x00%b', hash]),
-            runGit(defaults.cwd, ['show', '--format=', '--name-status', hash]),
+            runGit(ctx, defaults.cwd, ['show', '-s', '--format=%H%x00%s%x00%b', hash]),
+            runGit(ctx, defaults.cwd, ['show', '--format=', '--name-status', hash]),
           ])
           const [commitHash, subject, body] = msg.split('\0')
           const files: GitDiffFile[] = nameStatus.split('\n').filter(line => line.length > 0).map((line) => {
@@ -3106,7 +3151,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       async fileDiff(request) {
         const { hash, path } = request.payload
         try {
-          const patch = await runGit(defaults.cwd, [
+          const patch = await runGit(ctx, defaults.cwd, [
             'show', '--format=', '--no-color', '--patch', hash, '--', path,
           ])
           return ok(request, { hash, path, patch })
@@ -3121,10 +3166,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async refs(request) {
         try {
-          const head = await runGit(defaults.cwd, ['symbolic-ref', '--short', '-q', 'HEAD'])
+          const head = await runGit(ctx, defaults.cwd, ['symbolic-ref', '--short', '-q', 'HEAD'])
             .then(out => out.trim())
             .catch(() => '')
-          const out = await runGit(defaults.cwd, [
+          const out = await runGit(ctx, defaults.cwd, [
             'for-each-ref', '--format=%(refname:short)%x00%(objecttype)', 'refs/heads', 'refs/tags',
           ])
           const branches: string[] = []
