@@ -62,28 +62,23 @@
 origin    git@github.com:lbowlsh/deepseek-harness.git        # 自己的 fork
 upstream  https://github.com/deepseek-ai/deepseek-harness.git # 只读源库
 
-* lbowl   2fbd4a0eff (本地)  ← 仍跟踪 origin/feat/git-history-viewer（远端旧名，待第 6 节收尾）
-  master  47f943859b = upstream/master（镜像一致）
+* lbowl   f7a458245c (本地) = origin/lbowl（fork 上的私有集成主分支）
+  master  47f943859b = upstream/master = origin/master（镜像一致）
 ```
 
 ---
 
 ## 4. 同步 Runbook
 
-### 4.1 一次性收尾（本会话剩余远程操作，需联网到 GitHub）
+### 4.1 一次性收尾（本会话已完成）
 
 ```bash
-# ① 首次把 lbowl 推到 fork，并建立 upstream 跟踪
-git push -u origin lbowl
-
-# ② 删除 fork 上的旧分支名，避免「两个真相」
-git push origin --delete feat/git-history-viewer
-
-# ③ 确认远端只剩 master + lbowl
-git ls-remote --heads origin
+git push -u origin lbowl                              # ① 首次把 lbowl 推到 fork
+git push origin --delete feat/git-history-viewer      # ② 删除 fork 旧分支名，避免「两个真相」
+git ls-remote --heads origin                          # ③ 确认远端只剩 master + lbowl
 ```
 
-> 若本地 `git push` 因网络 / 凭据受限失败，上述①②留作下次联网时执行；本地环境修复（第 3 节）不依赖远端。
+结果：fork 现仅有两个分支——`master`（上游镜像，`47f943859b`）与 `lbowl`（私有集成分支，`f7a458245c`）；`feat/git-history-viewer` 已从 fork 删除。
 
 ### 4.2 每次跟进源库（一条命令）
 
@@ -121,7 +116,7 @@ bash scripts/sync-upstream.sh
 | 1 | remote 重命名 `origin`↔`upstream` / `fork`→`origin` | 高 | ✅ 已完成（本会话） |
 | 2 | 插件分支更名 → `lbowl`（私有集成分支） | 中 | ✅ 已完成（本会话） |
 | 3 | 封装 `scripts/sync-upstream.sh` | 高 | ✅ 已完成（本会话） |
-| — | 收尾远端：push `origin/lbowl` + 删除 `origin/feat/git-history-viewer` | 高 | ⏳ 待联网执行（见 4.1） |
+| — | 收尾远端：push `origin/lbowl` + 删除 `origin/feat/git-history-viewer` | 高 | ✅ 已完成（本会话） |
 | 4 | 加固：`api-proxy.ts` 的 `execFile` → `ctx.subprocess` | 中 | 待办 |
 | 5 | 重构：git 域迁独立 `@deepseek-ai/dsh-host-git-log` Typert Remote 包 | 低（按跟进频率） | 待办 |
 | 6 | 补 Agent Note（DSH 仓库规矩） | 中 | 待办 |
