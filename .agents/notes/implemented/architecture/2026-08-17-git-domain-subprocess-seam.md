@@ -6,7 +6,7 @@ English | [中文](2026-08-17-git-domain-subprocess-seam.zh.md)
 
 ## Problem
 
-The `git.*` host API domain — the backend of the Web Git-history viewer — spawned `git` directly through `node:child_process` `execFile`. A raw spawn sidesteps the harness's subprocess seam, so the child inherited the full parent environment, including `DEEPSEEK_API_KEY` and other credential-shaped names, and a still-running `git` tree had no owner that would terminate and join it at service teardown.
+The `git.*` host API domain — the backend of the [Web git-history viewer](../feature/2026-08-16-web-git-history-viewer.md) — spawned `git` directly through `node:child_process` `execFile`. A raw spawn sidesteps the harness's subprocess seam, so the child inherited the full parent environment, including `DEEPSEEK_API_KEY` and other credential-shaped names, and a still-running `git` tree had no owner that would terminate and join it at service teardown.
 
 ## Decision
 

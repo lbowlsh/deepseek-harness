@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-`git.*` host API 域（Web Git 历史查看器的后端）此前通过 `node:child_process` 的 `execFile` 直接拉起 `git`。裸 spawn 绕过了 harness 的 subprocess seam：子进程继承了完整父环境——包括 `DEEPSEEK_API_KEY` 及其他 credential 形态的环境变量名——且仍在运行的 `git` 进程树在服务 teardown 时没有负责终止并收尾（join）的归属者。
+`git.*` host API 域（[Web Git 历史查看器](../feature/2026-08-16-web-git-history-viewer.md)的后端）此前通过 `node:child_process` 的 `execFile` 直接拉起 `git`。裸 spawn 绕过了 harness 的 subprocess seam：子进程继承了完整父环境——包括 `DEEPSEEK_API_KEY` 及其他 credential 形态的环境变量名——且仍在运行的 `git` 进程树在服务 teardown 时没有负责终止并收尾（join）的归属者。
 
 ## Decision
 
