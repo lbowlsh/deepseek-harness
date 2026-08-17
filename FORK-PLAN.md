@@ -117,9 +117,9 @@ bash scripts/sync-upstream.sh
 | 2 | 插件分支更名 → `lbowl`（私有集成分支） | 中 | ✅ 已完成（本会话） |
 | 3 | 封装 `scripts/sync-upstream.sh` | 高 | ✅ 已完成（本会话） |
 | — | 收尾远端：push `origin/lbowl` + 删除 `origin/feat/git-history-viewer` | 高 | ✅ 已完成（本会话） |
-| 4 | 加固：`api-proxy.ts` 的 `execFile` → `ctx.subprocess` | 中 | 待办 |
+| 4 | 加固：`api-proxy.ts` 的 `execFile` → `ctx.subprocess` | 中 | ✅ 已完成（本会话，带 note + 测试） |
 | 5 | 重构：git 域迁独立 `@deepseek-ai/dsh-host-git-log` Typert Remote 包 | 低（按跟进频率） | 待办 |
-| 6 | 补 Agent Note（DSH 仓库规矩） | 中 | 待办 |
+| 6 | 补 Agent Note（DSH 仓库规矩） | 中 | 部分完成：本会话加固已带 note；原 git-history 功能本身仍缺 note |
 | 7 | 样式修正：`.panel` 字面色 → `--dsw-*` | 低 | 待办 |
 | 8 | i18n：硬编码中文文案 → `locales.ts`（zh/en） | 低 | 待办 |
 
