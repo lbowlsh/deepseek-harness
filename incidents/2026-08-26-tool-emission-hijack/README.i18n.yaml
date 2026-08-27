@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write incidents/2026-08-26-tool-emission-hijack/README.md
-README.md: 1e71002298befa8223b33cb47f696df96d717d6f
-README.zh.md: f35af5be39b90f73ae6b27cc4a67af6e3d57cb1a
+README.md: bc77b652147566477d531e3ebdc3cb997c430067
+README.zh.md: f765eb367ab0a1e67e2e869dc09b05aea9fcde41

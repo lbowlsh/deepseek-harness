@@ -6,7 +6,7 @@ This directory holds operational fault-handling records for agent-run-side incid
 
 | ID | Title | Date | Status | Record |
 |---|---|---|---|---|
-| INC-2026-08-26-01 | Tool emission hijack (session-level generation layer) | 2026-08-26 | ✅ fix confirmed (hard-stop guard, `c993b39509`) | [2026-08-26-tool-emission-hijack](2026-08-26-tool-emission-hijack/README.md) |
+| INC-2026-08-26-01 | Tool emission hijack (session-level generation layer) | 2026-08-26 | ✅ fix confirmed + guardrail smoke check passed 2026-08-27 (hard-stop guard, `c993b39509`) | [2026-08-26-tool-emission-hijack](2026-08-26-tool-emission-hijack/README.md) |
 | INC-2026-08-26-02 | lbowl pre-existing doc-sync failures | 2026-08-26 | 🟡 未确认修复 | [2026-08-26-lbowl-doc-sync-failures](2026-08-26-lbowl-doc-sync-failures/README.md) |
 
 ## Status vocabulary
