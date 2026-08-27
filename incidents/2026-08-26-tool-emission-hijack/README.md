@@ -11,7 +11,7 @@ This directory is an independent fault-handling record in `incidents/`: the comp
 | Faulty session | `session-ef1d28fd-2a15-4c1e-9b83-8eaccffcf81b` (S3a quote lineitem derived-override Stage-1 run, working directory Atomos_Workflow_Database) |
 | Model / provider | kimi-coding / k3 (the two other recurring sessions used the same model) |
 | Nature | Generation-layer tool-selection defect (model-level), not an MCP platform defect, not a harness adapter defect |
-| Status | ✅ independently verified and closed |
+| Status | ✅ fix confirmed — repeat-tool-reminder hard stop (`c993b39509`) |
 
 ## Files
 

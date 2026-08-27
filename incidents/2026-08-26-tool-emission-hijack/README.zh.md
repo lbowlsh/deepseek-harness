@@ -11,7 +11,7 @@
 | 故障会话 | `session-ef1d28fd-2a15-4c1e-9b83-8eaccffcf81b`（S3a 报价明细派生 Stage-1 执行会话，工作目录 Atomos_Workflow_Database） |
 | 模型/提供方 | kimi-coding / k3（同型复发的另两个会话亦为该模型） |
 | 性质 | 生成层工具选择缺陷（模型级），非 MCP 平台缺陷，非 harness adapter 缺陷 |
-| 状态 | ✅ 已独立核查闭环 |
+| 状态 | ✅ 已确认修复——repeat-tool-reminder 硬熔断（`c993b39509`） |
 
 ## 目录文件
 
