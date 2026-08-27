@@ -1,8 +1,10 @@
 /**
- * Advisory per-agent repeat-call detector. It enriches post-execute decisions
- * with logged model context without vetoing or rewriting calls. Configuration
- * and chain semantics live in the package README; rationale lives in the
- * repeat-tool-reminder Agent Note.
+ * Per-agent repeat-call guard. By default it is advisory: it enriches
+ * post-execute decisions with logged model context without vetoing or
+ * rewriting calls. The opt-in `hardStop` config adds a pre-execute circuit
+ * breaker that denies the tracked call whose consecutive identical run would
+ * reach a configured length. Configuration and chain semantics live in the
+ * package README; rationale lives in the repeat-tool-reminder Agent Notes.
  * @module @deepseek-ai/dsh-repeat-tool-reminder
  */
 
@@ -12,7 +14,7 @@ import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { MessageSource } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
-import type { PostToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
+import type { PostToolDecision, PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 
 export const name = 'repeat-tool-reminder'
 
@@ -40,6 +42,19 @@ export interface Config {
    * always compares the FULL canonical string).
    */
   argumentsPreviewChars?: number
+  /**
+   * Optional hard circuit breaker. When `enabled`, the tracked call whose
+   * consecutive identical run would reach `at` is denied BEFORE dispatch (its
+   * tool body never runs) and every further identical attempt stays denied
+   * until the agent changes tool or arguments. Disabled by default: the guard
+   * stays advisory unless a deployment opts in.
+   */
+  hardStop?: {
+    /** Opt in to the pre-dispatch circuit breaker (default `false`). */
+    enabled?: boolean
+    /** Consecutive identical tracked calls that trip the breaker (default `10`). */
+    at?: number
+  }
 }
 
 export const Config: z<Config> = z.object({
@@ -47,6 +62,12 @@ export const Config: z<Config> = z.object({
   include: z.array(z.string()).default([]),
   exclude: z.array(z.string()).default([]),
   argumentsPreviewChars: z.number().default(500),
+  hardStop: z.object({
+    /** Opt in to the pre-dispatch circuit breaker (default `false`). */
+    enabled: z.boolean().default(false),
+    /** Consecutive identical tracked calls that trip the breaker (default `10`). */
+    at: z.number().default(10),
+  }).default({ enabled: false, at: 10 }),
 })
 
 /**
@@ -76,6 +97,19 @@ function detailedReminder(toolName: string, count: number, canonicalArguments: s
     + 'these exact arguments again. Inspect the latest result and choose a '
     + 'different action, different arguments, or finish the task if enough '
     + 'evidence has been gathered.'
+}
+
+/**
+ * The hard-stop denial. A pre-execute `deny` reason reaches the model as the
+ * denied call's error result (`Error: <reason>`), so the text must stand
+ * alone as the correction signal; the same argument-preview cap as the
+ * detailed reminder bounds it while the chain key keeps comparing the full
+ * canonical string.
+ */
+function hardStopDenial(toolName: string, count: number, canonicalArguments: string, previewChars: number): string {
+  return `repeat-tool-reminder hard stop: '${toolName}' was called ${count} times in a row with identical arguments — this call is denied and identical attempts stay denied. `
+    + 'Stop repeating this call. Inspect the latest result, then choose a different tool, different arguments, or finish the task. '
+    + `arguments: ${previewArguments(canonicalArguments, previewChars)}`
 }
 
 /**
@@ -169,6 +203,14 @@ export function apply(ctx: Context, config: Config): void {
   if (!Number.isInteger(argumentsPreviewChars) || argumentsPreviewChars < 1) {
     throw new Error(`repeat-tool-reminder: invalid argumentsPreviewChars ${argumentsPreviewChars} — must be an integer >= 1`)
   }
+  // Explicit resolve of the opt-in breaker: schemastery fills the inner
+  // defaults only for undefined fields, so a partial `hardStop` object still
+  // lands here with both values resolved.
+  const hardStopEnabled = config.hardStop?.enabled ?? false
+  const hardStopAt = config.hardStop?.at ?? 10
+  if (!Number.isInteger(hardStopAt) || hardStopAt < 2) {
+    throw new Error(`repeat-tool-reminder: invalid hardStop.at ${hardStopAt} — must be an integer >= 2`)
+  }
 
   const chains = new WeakMap<Agent, Chain>()
 
@@ -205,6 +247,34 @@ export function apply(ctx: Context, config: Config): void {
       source: { ...PLUGIN_SOURCE, form: 'notice', summary: `${exec.name} × ${count}` },
     })
   }
+
+  /**
+   * The consecutive count the NEXT tracked call with this identity would
+   * reach, without advancing the chain. The advance stays single-sourced in
+   * `observe` (post-execute), which also runs for denied calls — so a denied
+   * attempt is counted exactly once and the breaker holds.
+   */
+  function nextCount(exec: ToolExecution): number | undefined {
+    if (!exec.agent) return undefined
+    if (!tracked(exec.name)) return undefined
+    const key = JSON.stringify([exec.name, canonicalize(exec.arguments)])
+    const chain = chains.get(exec.agent)
+    return chain !== undefined && chain.key === key ? chain.count + 1 : 1
+  }
+
+  // Optional hard circuit breaker. When enabled, the tracked call whose run
+  // would reach `hardStop.at` is denied BEFORE dispatch — the tool body never
+  // runs, and the denial is unconditional, so the veto short-circuits the
+  // pre-execute waterfall (later listeners never see the call). The reason
+  // reaches the model as the call's error result; the call still passes
+  // post-execute, where `observe` advances the chain, keeping identical
+  // follow-ups denied until the agent changes tool or arguments.
+  ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
+    if (!hardStopEnabled) return next()
+    const count = nextCount(exec)
+    if (count === undefined || count < hardStopAt) return next()
+    return { kind: 'deny', reason: hardStopDenial(exec.name, count, canonicalize(exec.arguments), argumentsPreviewChars) }
+  })
 
   // Observe-and-enrich, never veto: count first (state advances regardless of
   // the downstream outcome), DELEGATE so a later listener can still block or

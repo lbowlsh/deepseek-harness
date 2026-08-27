@@ -16,8 +16,9 @@ const testToolSignal = new AbortController().signal
  * Behavior suite for the repeat-tool-call guard: chain semantics (identical /
  * different-tracked / untracked-transparent / per-agent / resets), threshold
  * escalation incl. the `thresholds[0]` gentle-text rule, canonicalization,
- * fold-onto-downstream-decision, and fail-loud config validation — all driven
- * through a real agent loop against a scripted mock adapter (no network).
+ * fold-onto-downstream-decision, the opt-in hard-stop circuit breaker, and
+ * fail-loud config validation — all driven through a real agent loop against
+ * a scripted mock adapter (no network).
  */
 
 /** Boot the core spine + the guard; the caller registers adapters and extra listeners. */
@@ -399,5 +400,141 @@ describe('config validation fails loud', () => {
     await expect(ctx.plugin(RepeatToolGuard, { argumentsPreviewChars: 0 })).rejects.toThrow(/argumentsPreviewChars/)
     const ctx2 = await spine()
     await expect(ctx2.plugin(RepeatToolGuard, { argumentsPreviewChars: 12.5 })).rejects.toThrow(/argumentsPreviewChars/)
+  })
+
+  it('rejects a hardStop.at below 2 or fractional, even while disabled', async () => {
+    const ctx = await spine()
+    await expect(ctx.plugin(RepeatToolGuard, { hardStop: { at: 1 } })).rejects.toThrow(/hardStop\.at/)
+    const ctx2 = await spine()
+    await expect(ctx2.plugin(RepeatToolGuard, { hardStop: { enabled: true, at: 2.5 } })).rejects.toThrow(/hardStop\.at/)
+  })
+})
+
+describe('hard stop', () => {
+  /** The tool-result blocks of one agent's session, flattened to isError + text for terse assertions. */
+  function resultBlobs(agent: Agent): { isError: boolean; text: string }[] {
+    const results = [...agent.session.events].filter((e): e is SessionEvent<'tool/result'> => e.type === 'tool/result')
+    return results.map((r) => {
+      const block = r.data.message.content[0]
+      return {
+        isError: block.isError === true,
+        text: block.content.map(c => c.type === 'text' ? c.text : '').join('|'),
+      }
+    })
+  }
+
+  it('denies the tracked call that reaches hardStop.at before dispatch and holds while identical', async () => {
+    const ctx = await harness({ hardStop: { enabled: true, at: 3 } })
+    const adapter = new MockAdapter([
+      toolCallResponse('c1', 'probe', { q: 1 }), // 1 ok
+      toolCallResponse('c2', 'probe', { q: 1 }), // 2 ok
+      toolCallResponse('c3', 'probe', { q: 1 }), // 3 denied
+      toolCallResponse('c4', 'probe', { q: 1 }), // 4 denied (breaker holds)
+      toolCallResponse('c5', 'other', {}),        // reset
+      toolCallResponse('c6', 'probe', { q: 1 }), // 1 ok again
+      textResponse('done'),
+    ])
+    ctx.llm.registerAdapter(['mock'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    const blobs = resultBlobs(agent)
+    expect(blobs.map(b => b.isError)).toEqual([false, false, true, true, false, false])
+    expect(blobs[2]!.text).toContain("Error: repeat-tool-reminder hard stop: 'probe' was called 3 times")
+    expect(blobs[2]!.text).toContain('arguments: {"q":1}')
+    expect(blobs[3]!.text).toContain('was called 4 times')
+    // Denied calls count: the third consecutive call still draws the gentle reminder.
+    expect(reminders(agent)).toHaveLength(1)
+  })
+
+  it('never invokes the tool body for a denied call', async () => {
+    const ctx = await harness({ hardStop: { enabled: true, at: 2 } })
+    let invocations = 0
+    ctx.tools.register(defineContentToolFixture({
+      name: 'counting',
+      description: 'c',
+      parameters: {},
+      async execute() { invocations += 1; return [{ type: 'text', text: 'ok' }] },
+    }))
+    const adapter = new MockAdapter([
+      toolCallResponse('c1', 'counting', {}),
+      toolCallResponse('c2', 'counting', {}), // 2nd → denied pre-dispatch
+      textResponse('done'),
+    ])
+    ctx.llm.registerAdapter(['mock'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    expect(invocations).toBe(1)
+    expect(resultBlobs(agent).map(b => b.isError)).toEqual([false, true])
+  })
+
+  it('a change of arguments escapes the breaker (new chain key)', async () => {
+    const ctx = await harness({ hardStop: { enabled: true, at: 2 } })
+    const adapter = new MockAdapter([
+      toolCallResponse('c1', 'probe', { q: 1 }),
+      toolCallResponse('c2', 'probe', { q: 1 }), // denied (2nd)
+      toolCallResponse('c3', 'probe', { q: 2 }), // allowed (fresh key)
+      toolCallResponse('c4', 'probe', { q: 2 }), // denied (2nd of the new key)
+      textResponse('done'),
+    ])
+    ctx.llm.registerAdapter(['mock'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    expect(resultBlobs(agent).map(b => b.isError)).toEqual([false, true, false, true])
+  })
+
+  it('excluded tools are never denied by the breaker', async () => {
+    const ctx = await harness({ exclude: ['other'], hardStop: { enabled: true, at: 2 } })
+    const adapter = new MockAdapter([
+      ...Array.from({ length: 4 }, (_, i) => toolCallResponse(`c${i}`, 'other', {})),
+      textResponse('done'),
+    ])
+    ctx.llm.registerAdapter(['mock'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    expect(resultBlobs(agent).some(b => b.isError)).toBe(false)
+  })
+
+  it('never denies when hardStop is not enabled (default advisory behavior)', async () => {
+    const ctx = await harness()
+    const adapter = new MockAdapter([
+      ...Array.from({ length: 6 }, (_, i) => toolCallResponse(`c${i}`, 'probe', { q: 1 })),
+      textResponse('done'),
+    ])
+    ctx.llm.registerAdapter(['mock'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    expect(resultBlobs(agent).some(b => b.isError)).toBe(false)
+    expect(reminders(agent)).toHaveLength(2) // gentle at 3, detailed at 5 — advisory only
+  })
+
+  it('an empty hardStop object resolves both defaults at load', async () => {
+    const ctx = await harness({ hardStop: {} })
+    // Reaching here means the `?? false` / `?? 10` resolves passed the fail-loud check.
+    expect(ctx).toBeTruthy()
+  })
+
+  it('ignores direct executes without an agent even when the breaker is enabled', async () => {
+    const ctx = await harness({ hardStop: { enabled: true, at: 2 } })
+    const direct = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('d1'), name: 'probe', arguments: { q: 1 } })
+    expect(direct.isError).toBe(false)
+  })
+
+  it('defensive defaults hold when apply bypasses the Loader schema (no hardStop key)', async () => {
+    const ctx = new Context()
+    await mountAgentLoopTestDependencies(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    // No hardStop key: the `?? false` / `?? 10` resolves must not throw.
+    RepeatToolGuard.apply(ctx, { thresholds: [2], include: [], exclude: [], argumentsPreviewChars: 500 })
+    expect(ctx).toBeTruthy()
   })
 })

@@ -15,7 +15,7 @@ export const name = 'repeat-tool-reminder-invariant'
 export const inject = ['invariants']
 
 /**
- * No runtime invariant: the repeat chain is private to one post-execute listener and exposes no
+ * No runtime invariant: the repeat chain is private to the guard's pre-/post-execute listeners and exposes no
  * package-owned event or snapshot that an independent companion can observe.
  */
 const install: InvariantInstaller = () => {}

@@ -6,8 +6,8 @@
 
 | 编号 | 标题 | 日期 | 状态 | 记录 |
 |---|---|---|---|---|
-| INC-2026-08-26-01 | 工具发射劫持（会话级生成层） | 2026-08-26 | 🟡 未确认修复 | [2026-08-26-tool-emission-hijack](2026-08-26-tool-emission-hijack/README.md) |
-| INC-2026-08-26-02 | lbowl 既有 doc-sync 门禁失败 | 2026-08-26 | 🟡 未确认修复 | [2026-08-26-lbowl-doc-sync-failures](2026-08-26-lbowl-doc-sync-failures/README.md) |
+| INC-2026-08-26-01 | 工具发射劫持（会话级生成层） | 2026-08-26 | 🟡 未确认修复 | [2026-08-26-tool-emission-hijack](2026-08-26-tool-emission-hijack/README.zh.md) |
+| INC-2026-08-26-02 | lbowl 既有 doc-sync 门禁失败 | 2026-08-26 | 🟡 未确认修复 | [2026-08-26-lbowl-doc-sync-failures](2026-08-26-lbowl-doc-sync-failures/README.zh.md) |
 
 ## 状态口径
 

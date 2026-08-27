@@ -1620,6 +1620,19 @@ export interface Config {
    * always compares the FULL canonical string).
    */
   argumentsPreviewChars?: number
+  /**
+   * Optional hard circuit breaker. When `enabled`, the tracked call whose
+   * consecutive identical run would reach `at` is denied BEFORE dispatch (its
+   * tool body never runs) and every further identical attempt stays denied
+   * until the agent changes tool or arguments. Disabled by default: the guard
+   * stays advisory unless a deployment opts in.
+   */
+  hardStop?: {
+    /** Opt in to the pre-dispatch circuit breaker (default `false`). */
+    enabled?: boolean
+    /** Consecutive identical tracked calls that trip the breaker (default `10`). */
+    at?: number
+  }
 }
 ```
 
@@ -3240,6 +3253,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-deliverables` — 需要 `systemPrompt`（[`packages/client/ui-deliverables/src/index.ts`](../packages/client/ui-deliverables/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-directory-picker-browse`（[`packages/client/ui-directory-picker-browse/src/index.ts`](../packages/client/ui-directory-picker-browse/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-directory-picker-native`（[`packages/client/ui-directory-picker-native/src/index.ts`](../packages/client/ui-directory-picker-native/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-git-history`（[`packages/client/ui-git-history/src/index.ts`](../packages/client/ui-git-history/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-goal`（[`packages/client/ui-goal/src/index.ts`](../packages/client/ui-goal/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-input-trigger`（[`packages/client/ui-input-trigger/src/index.ts`](../packages/client/ui-input-trigger/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-jobs`（[`packages/client/ui-jobs/src/index.ts`](../packages/client/ui-jobs/src/index.ts)）
