@@ -51,7 +51,8 @@ native/      @deepseek-ai/node-addon-landlock-run source of record (see native/R
 examples/    Runnable cordis.yml leaves over packages/examples bundles (see examples/AGENTS.md)
 .agents/     Agent workflows and Agent Notes (`notes/`)
 docs/        architecture, generated catalogs, postmortems, cookbook (see docs/AGENTS.md)
-incidents/   fault-handling records for agent-run-side incidents
+incidents/   agent-run-side fault-handling records
+governance/  fork workflow discipline
 scripts/     repo gates and generators
 website/     VitePress projection of selected bilingual docs/ sources
 ```
