@@ -7,6 +7,7 @@ This directory holds the fork workflow governance rules for this repository: how
 ## Files
 
 - [repo-sync.md](repo-sync.md) — repository update discipline (Chinese): topology, three disciplines, red lines, standard command sequences, and conflict handling.
+- [agent-run-health-probe.md](agent-run-health-probe.md) — agent run health discipline (Chinese): mandatory write-path health probe, model/session switch on recurrence, and the enabled deployment guardrails.
 
 ## Core disciplines
 

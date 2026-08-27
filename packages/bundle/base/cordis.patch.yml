@@ -349,7 +349,11 @@
     - id: spill-policy
       name: '@deepseek-ai/dsh-spill-policy'
       config:
-        maxInlineBytes: 50000
+        # Deployment tuning (lbowl, INC-2026-08-26-01): 16 KiB instead of the
+        # upstream 50 KiB, so oversized results — the hijack loop fed ~15K
+        # tokens per repetition — become bounded previews instead of riding
+        # into context unbounded.
+        maxInlineBytes: 16384
 
     # Durability checkpoints before each model request and top-level dispatch.
     - id: session-checkpoint-policy
@@ -386,12 +390,18 @@
       config:
         maxOutputChars: 16000
 
-    # Consecutive-repeat reminders on the tool chain.
+    # Consecutive-repeat reminders on the tool chain, plus the hard-stop
+    # circuit breaker (lbowl deployment tuning, INC-2026-08-26-01): the 9th
+    # identical call in a row is denied before dispatch, so a model-level
+    # emission loop stops executing instead of continuing across turns.
     - id: repeat-tool-reminder
       name: '@deepseek-ai/dsh-repeat-tool-reminder'
       config:
         thresholds: [3, 5, 8]
         argumentsPreviewChars: 500
+        hardStop:
+          enabled: true
+          at: 9
 
     # Every mode enables the stable model-facing web_search tool. DeepSeek search
     # resolves the same DEEPSEEK_API_KEY credential the Models page manages for

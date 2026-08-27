@@ -7,6 +7,7 @@
 ## 目录文件
 
 - [repo-sync.md](repo-sync.md) — 仓库更新纪律（中文）：拓扑、三条纪律、三条红线、标准操作序列、冲突与回退。
+- [agent-run-health-probe.md](agent-run-health-probe.md) — Agent 运行健康纪律（中文）：强制写前健康探针、复发换模型/换会话、已启用的部署护栏。
 
 ## 核心纪律
 
