@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-16-web-git-history-viewer.md
 2026-08-16-web-git-history-viewer.md: 743d3ba3f49ae845f516613d1c9c06315b21cd11
-2026-08-16-web-git-history-viewer.zh.md: 59445bba98903927dc3944d6802e188ef7836450
+2026-08-16-web-git-history-viewer.zh.md: e3ead030584af18453842ef2c8d56260051b1752

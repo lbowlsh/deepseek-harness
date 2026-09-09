@@ -12,7 +12,7 @@ DSH 是在用户 Git 工作区内工作的编码 agent，但 Web GUI 此前无�
 
 交付了一个只读的 Git 历史查看器，分两半：host 上的 `git.*` API 域，以及 `@deepseek-ai/dsh-client-ui-git-history` 客户端插件。
 
-host 域（`git.log` / `git.show` / `git.fileDiff` / `git.refs`）在部署工作区根目录运行 `git` 并返回类型化数据——提交行、name-status 文件列表、统一 diff 补丁、分支/标签引用——从 `git` 的 NUL 分隔输出在 Zod schema 之后解析。它天然只读：该域硬编码了它接受的 `git` 子命令，因此任何客户端输入都无法触达写命令。执行现已走受管子进程 seam（见 [subprocess-seam note](../architecture/2026-08-17-git-domain-subprocess-seam.md)）。
+host 域（`git.log` / `git.show` / `git.fileDiff` / `git.refs`）在部署工作区根目录运行 `git` 并返回类型化数据——提交行、name-status 文件列表、统一 diff 补丁、分支/标签引用——从 `git` 的 NUL 分隔输出在 Zod schema 之后解析。它天然只读：该域硬编码了它接受的 `git` 子命令，因此任何客户端输入都无法触达写命令。执行现已走受管子进程 seam（见 [subprocess-seam note](../architecture/2026-08-17-git-domain-subprocess-seam.zh.md)）。
 
 客户端插件贡献一个侧边栏 footer 入口（`sidebar.footer.action`，id `git-history`），打开一个全宽 `shell.overlay`（id `git-history`），以 SVG 泳道渲染提交 DAG、提交列表，以及带逐文件 patch 的提交详情面板。一个共享的 `createGitHistoryStore()` handle 驱动两个入口的开合与提交选择。客户端通过共享连接既有的 RPC 载体读取 host——不新增传输。
 
