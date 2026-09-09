@@ -119,6 +119,12 @@
     - id: workspace-controller
       name: '@deepseek-ai/dsh-api-workspace-controller'
 
+    # Read-only Git history over Typert Remote: commit DAG, refs, and file
+    # diffs for the deployment workspace repository (ui-git-history consumes
+    # it).
+    - id: git-controller
+      name: '@deepseek-ai/dsh-api-git-controller'
+
     - id: cordis-host-runner
       name: '@deepseek-ai/dsh-cordis-host-runner'
 
@@ -346,6 +352,11 @@
 
     - id: ui-trajectory
       name: '@deepseek-ai/dsh-client-ui-trajectory'
+
+    # Read-only Git history viewer: a sidebar footer action opens a
+    # frame-wide overlay rendering the workspace repository's commit DAG.
+    - id: ui-git-history
+      name: '@deepseek-ai/dsh-client-ui-git-history'
 
 # ── the agent plane moves behind agent presets ─────────────────────────────
 #
