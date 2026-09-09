@@ -419,11 +419,6 @@
         subagentProvider: spawn
         maxRounds: 64
 
-    - id: tool-str-replace-editor
-      name: '@deepseek-ai/dsh-tool-str-replace-editor'
-      config:
-        maxOutputChars: 16000
-
     # Consecutive-repeat reminders on the tool chain, plus the hard-stop
     # circuit breaker (lbowl deployment tuning, INC-2026-08-26-01): the 9th
     # identical call in a row is denied before dispatch, so a model-level
