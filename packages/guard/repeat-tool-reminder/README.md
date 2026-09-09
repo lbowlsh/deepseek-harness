@@ -1,45 +1,126 @@
+---
+description: "Advisory loop-hygiene guard that nudges the model out of identical tool-call loops, for users and maintainers choosing, configuring, or debugging the plugin."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-repeat-tool-reminder
 
 English | [中文](README.zh.md)
 
-An advisory loop-breaker, not a model-facing tool: it never appears in the tool list, and by default it never vetoes or rewrites a call — it adds one behavior. It watches each agent's stream of tool calls, counts runs of consecutive calls to the same tool with identical canonicalized arguments, and at configured run lengths injects an escalating advisory reminder telling the model to stop repeating itself, re-read the last result, and either change approach or conclude. The decision (retry differently, gather more evidence, or finish) stays entirely with the model: a legitimately repeated call is delayed by nothing and blocked by nothing. An opt-in `hardStop` config adds a second behavior — a pre-dispatch circuit breaker that denies the call whose identical run reaches a configured length. Decision record: [the repeat-tool-reminder Agent Note](../../../.agents/notes/archived/feature/2026-07-08-repeat-tool-guard.md); hard-stop record: [the hard-stop Agent Note](../../../.agents/notes/implemented/bug-fix/2026-08-26-repeat-tool-hard-stop.md).
+## Summary
 
-## Config
+This package helps a model escape loops in which it calls the same tool with identical arguments without making progress. At configured repeat counts, it asks the model to inspect the previous result and change approach or finish. The reminder is advisory: it never blocks or delays a legitimate repeated call. Repeats are tracked separately for each agent and cleared by a new user message. The `dsh` base bundle enables the package with reminders at 3, 5, and 8 repeats. An opt-in `hardStop` config adds a second behavior — a pre-dispatch circuit breaker that denies, before the tool body runs, the tracked call whose consecutive identical run reaches a configured length. Decision record: [the repeat-tool-guard Agent Note](../../../.agents/notes/archived/feature/2026-07-08-repeat-tool-guard.md); hard-stop record: [the hard-stop Agent Note](../../../.agents/notes/implemented/bug-fix/2026-08-26-repeat-tool-hard-stop.md).
+
+## Table of Contents
+
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Mount this plugin when the model should catch itself looping on identical tool calls. There is nothing to learn or wire: the `dsh` base bundle already runs it, and the defaults work for most sessions — tune the thresholds and tool scope below when you want the nudge sooner, later, or on fewer tools.
+
+### When to choose it
+
+Choose it when the model works autonomously for long stretches and a stuck loop is the failure you want to break with advice rather than force. Avoid it when identical repeats are legitimate and must run undisturbed — the guard only reminds, and a reminder is a small extra message after the repeated call — and when near-identical variants must be caught, because only exact repeats (same tool, same arguments regardless of property order) are detected. Choose the `hardStop` opt-in when a loop must stop executing rather than keep drawing reminders — for example a tool-emission loop that would otherwise burn turns or tokens.
+
+### Setting the thresholds and scope
+
+When you want to change when reminders fire or which tools they cover, mount the plugin with configuration:
 
 ```yaml
-- id: repeat-tool-reminder
-  name: '@deepseek-ai/dsh-repeat-tool-reminder'
+- name: '@deepseek-ai/dsh-repeat-tool-reminder'
   config:
-    thresholds: [3, 5, 8]        # default; consecutive counts that trigger a reminder
-    include: []                  # tool-name patterns to track; empty ⇒ all tools
-    exclude: [todo_write]        # tool-name patterns transparent to the chain
-    argumentsPreviewChars: 500   # default; cap on arguments quoted in the detailed reminder
-    hardStop:                    # default; optional pre-dispatch circuit breaker
-      enabled: false             # default; opt in to deny the run-reaching call
-      at: 10                     # default; consecutive identical calls that trip the breaker
+    thresholds: [3, 5, 8]        # remind at 3, 5, and 8 consecutive repeats
+    include: []                  # track every tool; list patterns to track only some
+    exclude: [todo_write]        # never track these tools
+    argumentsPreviewChars: 500   # cap on arguments shown in the detailed reminder
+    hardStop:
+      enabled: false             # opt in to the pre-dispatch circuit breaker
+      at: 10                     # consecutive identical calls that trip the breaker
 ```
 
-`thresholds` fails loud at plugin load: an empty list, a non-integer, a value below 2, or a duplicate throws, never a silent fall-back to defaults; `argumentsPreviewChars` equally rejects anything but an integer >= 1. The list is normalized to ascending order; the FIRST threshold delivers a short generic nudge, every later threshold delivers the detailed form naming the tool, the run length, and the canonical arguments — head-truncated at `argumentsPreviewChars` with an omitted-count marker, so a looping `write`/`edit` payload cannot ride into the next request unbounded (the chain key always compares the FULL canonical string; the cap bounds the reminder, never the detection).
+| Field | Default | Meaning |
+|---|---|---|
+| `thresholds` | `[3, 5, 8]` | Repeat counts that trigger a reminder |
+| `include` | `[]` | Only these tools are tracked; empty means every tool |
+| `exclude` | `[]` | These tools are never tracked; calls to them neither count nor reset |
+| `argumentsPreviewChars` | `500` | How many characters of the repeated arguments the detailed reminder shows |
+| `hardStop.enabled` | `false` | When `true`, deny before dispatch the tracked call whose run reaches `hardStop.at` |
+| `hardStop.at` | `10` | Consecutive identical tracked calls that trip the breaker |
 
-`hardStop` is disabled by default — the guard stays advisory unless a deployment opts in. When enabled, the tracked call whose consecutive identical run would reach `at` is denied BEFORE dispatch (its tool body never runs), and every further identical attempt stays denied until the agent changes tool or arguments; the denial reason reaches the model as the denied call's error result. `at` fails loud unless it is an integer >= 2. To keep the reminder escalation meaningful, set `at` above the highest `thresholds` entry — otherwise the breaker trips before the later reminders fire.
+Invalid configuration fails at startup with a clear error — an empty `thresholds` list, a repeat count below 2, a duplicate, or a `hardStop.at` below 2 — never a silent change of behavior. The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-repeat-tool-reminder) documents every accepted value.
 
-`include`/`exclude` entries support `*` wildcards and are predicates over whatever tools exist at call time, not references to registry entries — a pattern matching no currently registered tool is NOT an error (`exclude: [mcp_*]` stays valid in a deployment that loads no MCP tools), unlike `toolOrder`'s referent check.
+### What you get
 
-## Chain semantics
+With the defaults, a model that repeats the same call with identical arguments receives a short reminder on the third repeat — to analyze the previous result before calling again — and detailed reminders on the fifth and eighth, naming the tool and the repeated arguments so it can decide whether to change approach, gather more evidence, or finish. A new user message clears the count, so a fresh instruction is never treated as a loop. Reminders appear in the conversation after the repeated call's result, attributed to the plugin, so the model reads them like any other message.
 
-The chain key is `(tool name, canonical arguments)` — canonicalization is a deep key-sort plus `JSON.stringify`, so argument objects differing only in property order count as identical. A call identical to the previous tracked call increments the agent's consecutive counter; a different tracked call resets it to 1.
+With `hardStop.enabled: true`, the tracked call whose consecutive identical run would reach `at` is denied BEFORE dispatch — the tool body never runs — and every further identical attempt stays denied until the agent changes tool or arguments; the denial reason reaches the model as the denied call's error result. Set `at` above the highest `thresholds` entry so the reminders escalate before the breaker trips.
 
-- **Untracked calls are transparent to the chain.** A call excluded by `include`/`exclude` neither increments nor resets the counter, so `grep X → todo_write → grep X` still counts as two consecutive `grep X` when `todo_write` is excluded. This is what makes exclusion useful: bookkeeping tools interleaved into a loop must not launder it.
-- **Denied calls count.** Detection sits on `tools/post-execute`, which also runs for calls a `tools/pre-execute` listener denied — a model hammering a denied call is exactly the loop worth breaking.
-- **The hard stop denies before dispatch.** With `hardStop.enabled`, the guard's own `tools/pre-execute` listener denies the call whose run would reach `at` — the tool body never runs, later `tools/pre-execute` listeners never see the call, and the deny reason becomes the call's error result. The denied call still passes post-execute, so it counts toward the chain: identical follow-ups stay denied until the agent changes tool or arguments (a different tracked call resets the chain to 1 as usual).
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains how the guard detects repeats and delivers reminders, and points at the code that realizes it; the observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design philosophy
+
+The guard is built on four commitments:
+
+- **Advisory by default, veto by opt-in.** The guard enriches post-execute decisions with model context and never blocks or rewrites a call unless `hardStop.enabled` turns on its own pre-execute denial.
+- **Count in post-execute.** Detection runs on `tools/post-execute`, which also fires for denied calls; counting there lets one listener cover every attempt with no cross-event state, including the attempts the hard stop denies.
+- **Exact-match canonicalization.** Arguments reach the guard as the loop's `JSON.parse` output (or its raw-string fallback), so JSON's value domain is the whole input domain and a deep key-sort plus `JSON.stringify` is a complete, deterministic identity — no bigint, cycle, or `undefined` handling exists because no input path can produce them.
+- **Fail loud at load.** `thresholds`, `argumentsPreviewChars`, and `hardStop.at` validate in `apply` and throw, never falling back to defaults.
+
+### Detection: the repeat chain
+
+Each agent's chain is keyed by `(tool name, canonical arguments)` — two calls with the same tool and canonically identical arguments (property order ignored) count as consecutive, and a different tracked call resets the count to 1. The chain lives in a `WeakMap<Agent, Chain>`.
+
+- **Untracked calls are transparent to the chain.** A call excluded by `include`/`exclude` neither increments nor resets the counter, so `grep X → todo_write → grep X` still counts as two consecutive `grep X` when `todo_write` is excluded — bookkeeping tools interleaved into a loop do not launder it.
+- **Denied calls count.** Detection sits on `tools/post-execute`, which also runs for calls a `tools/pre-execute` listener denied; a model hammering a denied call is exactly the loop worth breaking.
+- **Hard stop denies before dispatch.** When `hardStop.enabled`, the guard's own `tools/pre-execute` listener denies the tracked call whose run reaches `at` — the tool body never runs, later pre-execute listeners never see the call, and the denial reason becomes the denied call's error result. The denied call still crosses post-execute, so it counts into the chain: identical attempts stay denied until the agent switches tool or arguments, which resets the chain as usual.
 - **Calls without an agent are ignored.** A direct `ctx.tools.execute()` caller has no model to remind and no live agent object to key on.
-- **Per-agent keying.** The tool registry is context-level and subagents interleave through the same waterfall, so a `WeakMap<Agent, Chain>` keys each chain by the live agent object; one agent's repetition never trips another's reminder. A user prompt (`agent/pre-step`) resets the submitting agent's chain, and object lifetime bounds the weak entry without a disposal listener.
-- **In-memory only.** A session resumed from persistence starts with a fresh chain — the guard is a heuristic nudge, not a logged invariant, later reminders are the accepted cost.
+- **Per-agent keying, reset on user prompts.** One agent's repetition never trips another's reminder; a user prompt (`agent/pre-step`) deletes the submitting agent's chain, and object lifetime bounds the weak entry without a disposal listener.
+- **In-memory only.** A session resumed from persistence starts with a fresh chain — the guard is a heuristic nudge, not a logged invariant, so reminders after a resume are the accepted cost.
 
-## Reminder delivery
+### Reminder delivery
 
-Reminders ride the post-execute decision's `additionalContexts` (source `{kind: 'plugin', plugin: 'repeat-tool-reminder'}`), never a `content` replacement: the `tool/result` event stays the tool's own output for audit. The loop buffers the context and appends it as an injected `user/message` after the step's tool results, which the session renders as a plain synthetic user message — so the reminder is model-visible, source-attributed, and reconstructable from the session log with no new session event. The guard always delegates via `next()` and prepends its reminder to the downstream decision's context array (both variants — a blocked call still gets the nudge); every entry retains its own source and metadata.
+Reminders ride the post-execute decision's `additionalContexts` (source `{kind: 'plugin', plugin: 'repeat-tool-reminder', form: 'notice', summary: '<tool> × <count>'}`), never a `content` replacement: the `tool/result` event stays the tool's own output for audit. The loop buffers the context and appends it as an injected `user/message` after the step's tool results, which the session renders as a plain synthetic user message — model-visible, source-attributed, and reconstructable from the session log with no new session event. The guard always delegates via `next()` and prepends its reminder to the downstream decision's context array, so both decision variants (a blocked call included) still get the nudge while every entry retains its own source and metadata.
 
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: `Config` schema, fail-loud validation, chain listeners |
+| — | No runtime invariant companion is published; the repeat chain is private to the guard's own listeners and exposes no package-owned event or snapshot that an independent companion can observe. |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the tools waterfall to exhaustive configuration and the guard group map.
+
+- [Tools subsystem reference](../../../docs/subsystems/tools.md) — the `tools/execute` waterfall, `additionalContexts`, and decision shapes this guard consumes.
+- [Generated configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-repeat-tool-reminder) — every accepted config field and its source declaration.
+- [guard group map](../README.md) — the sibling guard packages and the loop-hygiene family.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### First-threshold context message
@@ -86,21 +167,21 @@ Each reminder is retained history; `argumentsPreviewChars` bounds its data-depen
 
 Append-only; newly visible content follows the reusable request prefix and does not invalidate existing KV-cache entries.
 
-### Hard-stop denial
+### Hard-stop denial message
 
 #### What the model sees
 
-Only with `hardStop.enabled`: the call that would reach `at` consecutive identical tracked calls never runs; its result is an error carrying the denial below. The text stands alone as the correction signal.
+When the breaker trips, the denied call's error result carries the denial text below, so it must stand alone as the correction signal; the same argument-preview cap as the detailed reminder bounds it.
 
 ##### Hard-stop denial
 
-```markdown
-Error: repeat-tool-reminder hard stop: '<toolName>' was called <count> times in a row with identical arguments — this call is denied and identical attempts stay denied. Stop repeating this call. Inspect the latest result, then choose a different tool, different arguments, or finish the task. arguments: <canonicalArguments>
+```text
+repeat-tool-reminder hard stop: '<toolName>' was called <count> times in a row with identical arguments — this call is denied and identical attempts stay denied. Stop repeating this call. Inspect the latest result, then choose a different tool, different arguments, or finish the task. arguments: <canonicalArguments>
 ```
 
 #### Token effect
 
-No tokens while the run stays below `at`; each denied attempt adds one error result plus the denial text to retained history.
+Zero tokens from the guard before the trip; each denied attempt surfaces the denial as its call's error result, bounded by the preview cap.
 
 #### KV Cache effect
 
@@ -108,10 +189,26 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when the guard is a poor fit. They are current package constraints, not a task backlog.
+
 - **Exact-match detection only** — canonicalization is a deep key-sort, so near-identical variants (a tweaked path, extra whitespace inside a value) evade the chain; fuzzy matching is rejected pending evidence of need.
 - **Compaction does not reset chains** — a chain spanning a compaction checkpoint keeps counting.
-- **Opt-in breaker, advisory by default** — the hard stop denies only when `hardStop.enabled` is set; deployments that want pure nudges keep the default. A breaker configured at or below a reminder threshold trips before that reminder fires.
-- **Hard-stop denials are identity-scoped, not semantic** — near-identical variants escape the breaker exactly as they escape the chain.
+- **Blocking requires the `hardStop` opt-in** — reminders alone never block or delay a call; the pre-dispatch denial exists only under `hardStop.enabled`.
 - **No subagent chain-sharing** — chains stay isolated per agent; a parent and its subagent repeating the same call never combine.
-- **Legitimate idempotent polling still draws nudges** — and, with the breaker enabled, denials — the pressure valves are `thresholds`/`at`/`exclude` config.
-- **Past the highest threshold a chain goes silent** — reminders fire only at exact configured counts, never beyond them.
+- **Legitimate idempotent polling still draws nudges** past the thresholds — the pressure valves are the `thresholds`/`exclude` config.
+- **Past the highest threshold a chain goes silent** — reminders fire only at exact configured counts, never beyond them; an enabled hard stop keeps denying identical attempts regardless.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is working context for maintainers: open questions and directions that are not decided. It is explicitly non-authoritative — shipped behavior, limits, and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
+
+The [repeat-tool-guard feature note](../../../.agents/notes/archived/feature/2026-07-08-repeat-tool-guard.md) records the original design and alternatives under the former package name; the [naming ledger](../../../.agents/notes/archived/architecture/2026-08-11-repository-naming-contract-and-rename-ledger.md) records the rename to `repeat-tool-reminder` and its reason. The [hard-stop Agent Note](../../../.agents/notes/implemented/bug-fix/2026-08-26-repeat-tool-hard-stop.md) records the circuit-breaker design and the incident that motivated it.
+
+</details>
