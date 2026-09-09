@@ -10,14 +10,14 @@ The `git.*` host API domain — the backend of the [Web git-history viewer](../f
 
 ## Decision
 
-`git.*` now runs through the managed subprocess seam. `runGit` reads `ctx.get('subprocess')` — an optional service read, because the apiproxy does not declare `subprocess` as a required injection — and fails with a clear error when no provider is composed. It then `spawn`s `['git', ...args]` with collected stdout and stderr and a spill file; a non-zero exit becomes the git stderr tail as the error message, and stdout is recovered in full from the in-memory tail or, when that tail truncated, from the spill file.
+`git.*` now runs through the managed subprocess seam. `runGit` reads `ctx.get('subprocess')` — an optional service read, because the git-controller package does not declare `subprocess` as a required injection — and fails with a clear error when no provider is composed. It then `spawn`s `['git', ...args]` with collected stdout and stderr and a spill file; a non-zero exit becomes the git stderr tail as the error message, and stdout is recovered in full from the in-memory tail or, when that tail truncated, from the spill file.
 
-Routing through the seam buys two guarantees for free: credential-shaped environment names are scrubbed from the child (`SENSITIVE_ENV_PATTERN` plus all `DSH_*`), and a still-running tree is terminated and joined when the subprocess service disposes. The apiproxy now depends on `@deepseek-ai/dsh-subprocess` for types and the `ctx.subprocess` Context merge only; the provider (`dsh-subprocess-local`) is already mounted by the base bundle.
+Routing through the seam buys two guarantees for free: credential-shaped environment names are scrubbed from the child (`SENSITIVE_ENV_PATTERN` plus all `DSH_*`), and a still-running tree is terminated and joined when the subprocess service disposes. `@deepseek-ai/dsh-api-git-controller` depends on `@deepseek-ai/dsh-subprocess` for types and the `ctx.subprocess` Context merge only; the provider (`dsh-subprocess-local`) is already mounted by the base bundle. The domain moved into that package when upstream removed the host `apiproxy`; the [migration note](2026-09-09-git-history-controller-migration.md) records the move, and the routing decision above is unchanged by it.
 
 ## Alternatives considered
 
-- **Keep `execFile` and scrub/terminate by hand**: rejected — that duplicates the seam's `scrubbedParentEnv` and tree-termination ladder inside the apiproxy, the exact code the seam exists to own.
-- **Declare `subprocess` a required injection on `ApiProxyService`**: rejected — the gateway is composed without a subprocess provider in some hosts, and the git domain is an auxiliary read-only surface that can degrade; an optional `ctx.get` keeps the gateway loadable everywhere else.
+- **Keep `execFile` and scrub/terminate by hand**: rejected — that duplicates the seam's `scrubbedParentEnv` and tree-termination ladder inside the controller, the exact code the seam exists to own.
+- **Declare `subprocess` a required injection on `GitController`**: rejected — the gateway is composed without a subprocess provider in some hosts, and the git domain is an auxiliary read-only surface that can degrade; an optional `ctx.get` keeps the controller loadable everywhere else.
 
 ## Consequences
 

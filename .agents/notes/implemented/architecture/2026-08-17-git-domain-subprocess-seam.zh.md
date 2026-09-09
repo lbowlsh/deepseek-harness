@@ -10,14 +10,14 @@ Status: implemented
 
 ## Decision
 
-`git.*` 现在走受管的 subprocess seam。`runGit` 通过 `ctx.get('subprocess')` 读取该服务——这是可选服务读取，因为 apiproxy 并未把 `subprocess` 声明为必需注入——并在未组合任何 provider 时以清晰错误失败。随后以收集模式 spawn `['git', ...args]`（stdout/stderr 均收集，并带 spill 文件）；非零退出码会把 git 的 stderr 尾部作为错误信息抛出，stdout 则从内存尾部完整恢复，或在尾部被截断时从 spill 文件读回。
+`git.*` 现在走受管的 subprocess seam。`runGit` 通过 `ctx.get('subprocess')` 读取该服务——这是可选服务读取，因为 git-controller 包并未把 `subprocess` 声明为必需注入——并在未组合任何 provider 时以清晰错误失败。随后以收集模式 spawn `['git', ...args]`（stdout/stderr 均收集，并带 spill 文件）；非零退出码会把 git 的 stderr 尾部作为错误信息抛出，stdout 则从内存尾部完整恢复，或在尾部被截断时从 spill 文件读回。
 
-走 seam 免费换来两项保证：credential 形态的环境变量名会在子进程中被清洗（`SENSITIVE_ENV_PATTERN` 加上全部 `DSH_*`），且仍在运行的进程树会在 subprocess 服务 dispose 时被终止并收尾。apiproxy 现在依赖 `@deepseek-ai/dsh-subprocess` 仅用于类型与 `ctx.subprocess` 的 Context 合并；provider（`dsh-subprocess-local`）已由 base bundle 挂载。
+走 seam 免费换来两项保证：credential 形态的环境变量名会在子进程中被清洗（`SENSITIVE_ENV_PATTERN` 加上全部 `DSH_*`），且仍在运行的进程树会在 subprocess 服务 dispose 时被终止并收尾。`@deepseek-ai/dsh-api-git-controller` 现在依赖 `@deepseek-ai/dsh-subprocess` 仅用于类型与 `ctx.subprocess` 的 Context 合并；provider（`dsh-subprocess-local`）已由 base bundle 挂载。域在上游删除 host `apiproxy` 时迁入该包（[迁移 note](2026-09-09-git-history-controller-migration.zh.md) 记录此次迁移），上述路由决策不因迁移而改变。
 
 ## Alternatives considered
 
-- **保留 `execFile` 并手写清洗/终止**：否决——那等于在 apiproxy 内重复实现 seam 的 `scrubbedParentEnv` 与进程树终止阶梯，而这正是 seam 存在的意义。
-- **在 `ApiProxyService` 上把 `subprocess` 声明为必需注入**：否决——部分 host 的网关组合并不带 subprocess provider，且 git 域只是可降级的只读辅助面；可选 `ctx.get` 让网关在其余场景仍可加载。
+- **保留 `execFile` 并手写清洗/终止**：否决——那等于在控制器内重复实现 seam 的 `scrubbedParentEnv` 与进程树终止阶梯，而这正是 seam 存在的意义。
+- **在 `GitController` 上把 `subprocess` 声明为必需注入**：否决——部分 host 的网关组合并不带 subprocess provider，且 git 域只是可降级的只读辅助面；可选 `ctx.get` 让控制器在其余场景仍可加载。
 
 ## Consequences
 

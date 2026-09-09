@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-17-git-domain-subprocess-seam.md
-2026-08-17-git-domain-subprocess-seam.md: 5617649691eaccce77e0af35b15cb08976f87dd3
-2026-08-17-git-domain-subprocess-seam.zh.md: 04b51dbf3c27d853ab216d9ca00c3b076f0e6dcb
+2026-08-17-git-domain-subprocess-seam.md: e7975367bdd4c29cf966dbc7192edf0bf6430b38
+2026-08-17-git-domain-subprocess-seam.zh.md: 2b5fd5947fca51e7f9f2e5437890e72025f2ec8c

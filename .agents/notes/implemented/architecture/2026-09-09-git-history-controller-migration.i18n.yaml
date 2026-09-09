@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-09-git-history-controller-migration.md
+2026-09-09-git-history-controller-migration.md: 3dd8cd4e3fcc2f61fd54341ec9387af565e26115
+2026-09-09-git-history-controller-migration.zh.md: 6cea6ab473f3e75ab4726efbde0b83840b2cfa43
